@@ -54,6 +54,9 @@ class ImmichProvider(DAVProvider):
         return root.resolve("", path)
     
     def refresh_assets(self):
+        # Clear all_album_data to store only fresh data
+        self.all_album_data = []
+        
         for album_id in self.album_ids:
             url = f"{self.immich_url}/api/albums/{album_id}"
             headers = {'x-api-key': f'{self.api_key}'}
