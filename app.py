@@ -19,7 +19,7 @@ _logger.setLevel(logging.INFO)
 load_dotenv()
 
 class ImmichProvider(DAVProvider):
-    def __init__(self, immich_url, api_key, album_ids, refresh_rate_hours, filetype_ignore_list):
+    def __init__(self, immich_url, api_key, album_ids, refresh_rate_hours, filetype_ignore_list, flatten_structure):
         super().__init__()
         self.immich_url = immich_url
         self.api_key = api_key
@@ -27,12 +27,13 @@ class ImmichProvider(DAVProvider):
         self.all_album_data = []
         self.refresh_rate_seconds = refresh_rate_hours * 3600  # Convert hours to seconds
         self.filetype_ignore_list = filetype_ignore_list
+        self.flatten_structure = flatten_structure
         self.refresh_thread = threading.Thread(target=self._auto_refresh)
         self.stop_event = threading.Event()
-        
+
         # Initial asset load
         self.refresh_assets()
-        
+
         # Start the background thread to refresh assets periodically
         self.refresh_thread.start()
         
@@ -50,7 +51,7 @@ class ImmichProvider(DAVProvider):
     def get_resource_inst(self, path, environ):
         _logger.info("get_resource_inst('%s')" % path)
         self._count_get_resource_inst += 1
-        root = RootCollection(environ)
+        root = RootCollection(environ, self.flatten_structure)
         return root.resolve("", path)
     
     def refresh_assets(self):
@@ -78,8 +79,9 @@ class ImmichProvider(DAVProvider):
 class RootCollection(DAVCollection):
     """Resolve top-level requests '/'."""
 
-    def __init__(self, environ):
+    def __init__(self, environ, flatten_structure):
         super().__init__("/", environ)
+        self.flatten_structure = flatten_structure
         
     def _get_album(self, name):
         for album in self.provider.all_album_data:
@@ -90,24 +92,52 @@ class RootCollection(DAVCollection):
         return [entry['albumName'] for entry in self.provider.all_album_data]
 
     def get_member(self, name):
-        return ImmichAlbumCollection(join_uri(self.path, name), self.environ, 
+        return ImmichAlbumCollection(join_uri(self.path, name), self.environ,
                                      next((entry for entry in self.provider.all_album_data 
-                                           if entry['albumName'] == name), None))
+                                           if entry['albumName'] == name), None), 
+                                     self.flatten_structure)
 
 
 class ImmichAlbumCollection(DAVCollection):
-    def __init__(self, path: str, environ: dict, album: dict):
+    def __init__(self, path: str, environ: dict, album: dict, flatten_structure: bool):
         super().__init__(path, environ)
+        self.flatten_structure = flatten_structure  # Whether to flatten the structure
         self.visibleMemberNames = ('videos', 'images')
         self.album = album
         
     def get_member_names(self):
-        return self.visibleMemberNames
+        if self.flatten_structure:
+            # If flatten_structure is True, return all asset names (both videos and images)
+            return sorted(self._get_all_assets().keys())
+        else:
+            # Otherwise, return the subcollections (images, videos)
+            return self.visibleMemberNames
     
     def get_member(self, name):
-        if name in self.visibleMemberNames:
-            return ImmichAssetCollection(join_uri(self.path, name), self.environ, self.album)
-        return None
+        if self.flatten_structure:
+            # If flatten_structure is True, return the asset directly
+            asset = self._get_all_assets().get(name)
+            return ImmichAsset(join_uri(self.path, name), self.environ, asset)
+        else:
+            # If flatten_structure is False, return the subcollections (images, videos)
+            if name in self.visibleMemberNames:
+                return ImmichAssetCollection(join_uri(self.path, name), self.environ, self.album)
+            return None
+
+    def _get_all_assets(self):
+        """Return a dictionary of all assets (both images and videos) for the album."""
+        all_assets = {}
+        for asset in self.album.get('assets', []):
+            
+            # Extract file extension and check against excluded_file_types
+            file_extension = asset['originalFileName'].split(".")[-1].lower()
+            
+            if file_extension in self.provider.filetype_ignore_list:
+                continue  # Skip this asset if its type is in the excluded list
+            
+            asset_name = asset['originalFileName']
+            all_assets[asset_name] = asset
+        return all_assets
 
 
 class ImmichAssetCollection(DAVCollection):
@@ -204,12 +234,13 @@ def run_webdav_server():
     refresh_rate_hours = int(os.getenv("REFRESH_RATE_HOURS", 1))  # Default to 1 hour
     port = int(os.getenv("WEBDAV_PORT", 1700))  # Allow port to be set via environment variable
     excluded_file_types = [id.strip().lower() for id in os.getenv("EXCLUDED_FILE_TYPES", "").split(",") if id.strip()]
+    flatten_structure = os.getenv("FLATTEN_ASSET_STRUCTURE", "false").lower() == "true"  # Load flatten structure option
 
     # Validate required environment variables
     if not immich_url or not api_key or not album_ids:
         raise ValueError("IMMICH_URL, IMMICH_API_KEY, and ALBUM_IDS must be set.")
 
-    provider = ImmichProvider(immich_url, api_key, album_ids, refresh_rate_hours, excluded_file_types)
+    provider = ImmichProvider(immich_url, api_key, album_ids, refresh_rate_hours, excluded_file_types, flatten_structure)
 
     config = {
         "host": "0.0.0.0",
@@ -241,6 +272,7 @@ def run_webdav_server():
     finally:
         provider.stop_refresh()
         server.stop()
+
 
 if __name__ == "__main__":
     run_webdav_server()
