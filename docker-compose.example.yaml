@@ -33,7 +33,7 @@ services:
       - nfs-immich-data:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
     ports:
-      - 2283:3001
+      - 2283:2283
     dns:
       - 9.9.9.9
     depends_on:
@@ -61,13 +61,13 @@ services:
   immich-webdav-wrapper:
     container_name: immich_webdav_wrapper
     image: docker.io/persistentcloud/immich-webdav-wrapper:latest
-    platform: linux/amd64
     environment:
       IMMICH_URL: http://immich_server:2283
       IMMICH_API_KEY: ${IMMICH_API_KEY}
       ALBUM_IDS: ${ALBUM_IDS}
       REFRESH_RATE_HOURS: ${REFRESH_RATE_HOURS}
       EXCLUDED_FILE_TYPES: ${EXCLUDED_FILE_TYPES}
+      FLATTEN_ASSET_STRUCTURE: false
     ports:
       - 1700:1700
     volumes:
