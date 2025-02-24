@@ -6,6 +6,7 @@ import threading
 import time
 from cheroot import wsgi
 from datetime import datetime
+from dateutil.parser import *
 from dotenv import load_dotenv
 from wsgidav.wsgidav_app import WsgiDAVApp
 from wsgidav.dav_provider import DAVProvider, DAVCollection, DAVNonCollection
@@ -219,8 +220,7 @@ class ImmichAsset(DAVNonCollection):
         return True
 
     def get_last_modified(self):
-        date_format = "%Y-%m-%dT%H:%M:%S.%fZ"
-        return int(datetime.strptime(self.asset.get("fileModifiedAt"), date_format).timestamp())
+        return int(isoparse(self.asset.get("fileModifiedAt")).timestamp())
         
     def get_content(self):
         return open(f"/{self.asset.get('originalPath')}", "rb")
