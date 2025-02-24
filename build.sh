@@ -2,10 +2,8 @@
 
 # Get the Docker registry from the first argument
 REGISTRY="$1"
-if [[ -z $REGISTRY ]]; then
-  REGISTRY=""; 
-else
-  REGISTRY="$1/";
+if [[ -n $REGISTRY ]]; then
+  REGISTRY="${REGISTRY%/}/"
 fi
 
 echo "Used registry: ${REGISTRY}"
