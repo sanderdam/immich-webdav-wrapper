@@ -37,7 +37,7 @@ FLATTEN_ASSET_STRUCTURE=true
 
 - `IMMICH_URL`: Base URL of your Immich instance.
 - `IMMICH_API_KEY`: API key for authentication with Immich.
-- `ALBUM_IDS`: Comma-separated list of album IDs to be fetched.
+- `ALBUM_IDS`: Comma-separated list of album IDs to be fetched. If empty, then all albums will be fetched.
 - `REFRESH_RATE_HOURS`: Interval (in hours) for refreshing album data.
 - `EXCLUDED_FILE_TYPES`: Comma-separated list of file extensions to ignore.
 - `FLATTEM_ASSET_STRUCTURE`: Determines whether assets are organized in a flat directory structure or within content-type-specific subdirectories in the WebDAV server.
