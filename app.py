@@ -196,8 +196,7 @@ class ImmichAsset(DAVNonCollection):
         return self.asset.get("originalMimeType")
 
     def get_creation_date(self):
-        date_format = "%Y-%m-%dT%H:%M:%S.%fZ"
-        return int(datetime.strptime(self.asset.get("fileCreatedAt"), date_format).timestamp())
+        return int(isoparse(self.asset.get("fileCreatedAt")).timestamp())
 
     def get_display_name(self):
         return self.name
