@@ -43,6 +43,19 @@ class ImmichProvider(DAVProvider):
         while not self.stop_event.wait(self.refresh_rate_seconds):
             _logger.info("Refreshing assets...")
             self.refresh_assets()
+
+    def _fetch_with_retries(self, url, max_retries=3):
+        """Helper function to fetch data with retries."""
+        headers = {'x-api-key': self.api_key}
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as e:
+                _logger.error(f"Error fetching {url} (attempt {attempt}/{max_retries}): {e}")
+                time.sleep(2)
+        return None  # Return None if all retries fail
         
     def stop_refresh(self):
         """Stop the background refresh thread."""
@@ -58,24 +71,22 @@ class ImmichProvider(DAVProvider):
     def refresh_assets(self):
         # Clear all_album_data to store only fresh data
         self.all_album_data = []
-        
-        for album_id in self.album_ids:
-            url = f"{self.immich_url}/api/albums/{album_id}"
-            headers = {'x-api-key': f'{self.api_key}'}
-            for attempt in range(3):  # Retry up to 3 times
-                try:
-                    response = requests.get(url, headers=headers)
-                    response.raise_for_status()
-                    break  # Break if the request is successful
-                except requests.RequestException as e:
-                    _logger.error(f"Error fetching album {album_id} (attempt {attempt + 1}): {e}")
-                    time.sleep(2)  # Wait before retrying
-            else:
-                continue  # If we exhaust attempts, skip to the next album
-            self.all_album_data.append(response.json())
+        if not self.album_ids:
+            _logger.info("No album Ids provided. Fetching all albums.")
+            url = f"{self.immich_url}/api/albums"
+            albums = self._fetch_with_retries(url)
+            if albums:
+                self.all_album_data = albums
+        else:
+            for album_id in self.album_ids:
+                url = f"{self.immich_url}/api/albums/{album_id}"
+                album_data = self._fetch_with_retries(url)
+                if album_data:
+                    self.all_album_data.append(album_data)
 
-        _logger.info(f"Loaded {sum(album['assetCount'] for album in self.all_album_data)} assets from the API.")
-        
+        asset_count = sum(album.get('assetCount', 0) for album in self.all_album_data)
+        _logger.info(f"Loaded {asset_count} assets from the API.")
+
         
 class RootCollection(DAVCollection):
     """Resolve top-level requests '/'."""
