@@ -4,6 +4,7 @@ import os
 import requests
 import threading
 import time
+import json
 from cheroot import wsgi
 from datetime import datetime
 from dateutil.parser import *
@@ -56,6 +57,12 @@ class ImmichProvider(DAVProvider):
                 _logger.error(f"Error fetching {url} (attempt {attempt}/{max_retries}): {e}")
                 time.sleep(2)
         return None  # Return None if all retries fail
+
+    def _get_all_album_ids(self):
+        url = f"{self.immich_url}/api/albums"
+        albums = self._fetch_with_retries(url)
+        if albums:
+            return [album.get('id', 0) for album in albums]
         
     def stop_refresh(self):
         """Stop the background refresh thread."""
@@ -73,17 +80,12 @@ class ImmichProvider(DAVProvider):
         self.all_album_data = []
         if not self.album_ids:
             _logger.info("No album Ids provided. Fetching all albums.")
-            url = f"{self.immich_url}/api/albums"
-            albums = self._fetch_with_retries(url)
-            if albums:
-                self.all_album_data = albums
-        else:
-            for album_id in self.album_ids:
-                url = f"{self.immich_url}/api/albums/{album_id}"
-                album_data = self._fetch_with_retries(url)
-                if album_data:
-                    self.all_album_data.append(album_data)
-
+            self.album_ids = self._get_all_album_ids()
+        for album_id in self.album_ids:
+            url = f"{self.immich_url}/api/albums/{album_id}"
+            album_data = self._fetch_with_retries(url)
+            if album_data:
+                self.all_album_data.append(album_data)
         asset_count = sum(album.get('assetCount', 0) for album in self.all_album_data)
         _logger.info(f"Loaded {asset_count} assets from the API.")
 
@@ -240,15 +242,16 @@ def run_webdav_server():
     # Load all environment variables at once
     immich_url = os.getenv("IMMICH_URL")
     api_key = os.getenv("IMMICH_API_KEY")
-    album_ids = [id.strip() for id in os.getenv("ALBUM_IDS", "").split(",")]
+    album_ids_env = os.getenv("ALBUM_IDS")
+    album_ids = [id.strip() for id in album_ids_env.split(",") if id.strip()] if album_ids_env else []
     refresh_rate_hours = int(os.getenv("REFRESH_RATE_HOURS", 1))  # Default to 1 hour
     port = int(os.getenv("WEBDAV_PORT", 1700))  # Allow port to be set via environment variable
     excluded_file_types = [id.strip().lower() for id in os.getenv("EXCLUDED_FILE_TYPES", "").split(",") if id.strip()]
     flatten_structure = os.getenv("FLATTEN_ASSET_STRUCTURE", "false").lower() == "true"  # Load flatten structure option
 
     # Validate required environment variables
-    if not immich_url or not api_key or not album_ids:
-        raise ValueError("IMMICH_URL, IMMICH_API_KEY, and ALBUM_IDS must be set.")
+    if not immich_url or not api_key:
+        raise ValueError("IMMICH_URL and IMMICH_API_KEY must be set.")
 
     provider = ImmichProvider(immich_url, api_key, album_ids, refresh_rate_hours, excluded_file_types, flatten_structure)
 
