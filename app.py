@@ -200,7 +200,7 @@ class ImmichAsset(DAVNonCollection):
         
     def get_content_length(self):
         try:
-            return os.path.getsize(f"/{self.asset.get('originalPath')}")
+            return os.path.getsize(f"{self.asset.get('originalPath')}")
         except FileNotFoundError:
             _logger.error("Check if mountPath is correct")
             return None
@@ -235,7 +235,7 @@ class ImmichAsset(DAVNonCollection):
         return int(isoparse(self.asset.get("fileModifiedAt")).timestamp())
         
     def get_content(self):
-        return open(f"/{self.asset.get('originalPath')}", "rb")
+        return open(f"{self.asset.get('originalPath')}", "rb")
     
     
 def run_webdav_server():
